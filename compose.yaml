@@ -1,0 +1,27 @@
+services:
+  poker:
+    build: .
+    restart: unless-stopped
+    environment:
+      POKER_ORIGIN: https://${POKER_DOMAIN:?Set POKER_DOMAIN in .env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    volumes:
+      - poker_data:/app/data
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      POKER_DOMAIN: ${POKER_DOMAIN:?Set POKER_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  poker_data:
+  caddy_data:
+  caddy_config:

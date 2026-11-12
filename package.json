@@ -1,0 +1,31 @@
+{
+  "name": "poker-project",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @poker/web dev",
+    "dev:all": "concurrently --kill-others --names server,web \"pnpm --filter @poker/server dev\" \"pnpm --filter @poker/web dev\"",
+    "dev:server": "pnpm --filter @poker/server dev",
+    "server": "pnpm --filter @poker/server start",
+    "migrate:postgres": "pnpm --filter @poker/server migrate:postgres",
+    "build": "pnpm --filter @poker/game-engine build && pnpm --filter @poker/server build && pnpm --filter @poker/web build",
+    "clean": "pnpm --filter @poker/game-engine clean",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.check.json && pnpm --filter @poker/web exec tsc --noEmit && pnpm --filter @poker/server exec tsc --noEmit"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@types/node": "^24.10.0",
+    "@types/pg": "^8.23.1",
+    "concurrently": "^10.0.7",
+    "socket.io-client": "^4.8.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
+}

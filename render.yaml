@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: poker-friends
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: POKER_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: POKER_SNAPSHOT_KEY
+        generateValue: true
