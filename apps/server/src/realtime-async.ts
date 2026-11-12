@@ -23,11 +23,11 @@ export async function attachAsyncRealtime(http:HttpServer,wallet:PostgresWalletS
   const publish=async(room:AsyncRoom):Promise<void>=>{
     const players=await Promise.all(room.players.map(async({id,name,leaving})=>({id,name,leaving,online:id.startsWith("bot:")||online(id),stack:(await wallet.seat(id))?.stack??0})));
     for(const player of room.players){
-      if(player.leaving)continue;
+      if(player.leaving||player.id.startsWith("bot:"))continue;
       const hand=room.hand?.table.betting.players.some(item=>item.id===player.id)?tableView(room.hand.table,player.id):undefined;
       io.to(accountRoom(player.id)).emit("room:state",{code:room.code,players,hand,handId:room.hand?.id,version:room.hand?.version??0,deadline:deadlines.get(room.code)?.at??null,profile:await wallet.profile(player.id)});
     }
-    if(room.hand?.table.result)for(const player of room.hand.table.betting.players)io.to(accountRoom(player.id)).emit("wallet:profile",await wallet.profile(player.id));
+    if(room.hand?.table.result)for(const player of room.hand.table.betting.players)if(!player.id.startsWith("bot:"))io.to(accountRoom(player.id)).emit("wallet:profile",await wallet.profile(player.id));
   };
   const schedule=(room:AsyncRoom):void=>{
     const hand=room.hand;if(!hand||hand.table.result||!hand.table.betting.turn){cancelTimer(turnTimers,room.code);deadlines.delete(room.code);return;}
