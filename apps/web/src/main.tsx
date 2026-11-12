@@ -4,6 +4,7 @@ import {io, type Socket} from "socket.io-client";
 import {labels,parsePreferences,type Preferences} from "./preferences.js";
 import {FriendsPanel} from "./FriendsPanel.js";
 import {HistoryPanel} from "./HistoryPanel.js";
+import {BetPanel} from "./BetPanel.js";
 import {positionLabels} from "./positions.js";
 import "./style.css";
 
@@ -47,6 +48,7 @@ function App() {
   const [version, setVersion] = useState(0);
   const [handId, setHandId] = useState("");
   const [raiseTo, setRaiseTo] = useState("200");
+  const [betPanelOpen,setBetPanelOpen]=useState(false);
   const [actionError, setActionError] = useState("");
   const [profile, setProfile] = useState<Profile|null>(null);
   const [walletError, setWalletError] = useState("");
@@ -131,14 +133,17 @@ function App() {
     setActionError("");
     socket.timeout(5000).emit("room:action", roomCode, handId, version, type==="raise" ? {type,to:Number(raiseTo)} : {type},
       (err:Error|null, result?:{ok:boolean;error?:string}) => {
-        if(err || !result?.ok) {setActionError(result?.error ?? "Сервер не ответил.");socket.emit("room:sync");}
+        if(err || !result?.ok) {setActionError(result?.error ?? "Сервер не ответил.");socket.emit("room:sync");} else if(type==="raise")setBetPanelOpen(false);
       });
   };
   const me=hand?.betting.players.find(player=>player.id===profile?.id);
   const myTurn=!!hand && hand.betting.turn===profile?.id;
   const readyPlayers=players.filter(player=>!player.leaving && player.stack>0).length;
   const callAmount=hand && me ? Math.max(0,hand.betting.currentBet-me.streetBet) : 0;
+  const maxRaise=me ? me.streetBet+me.stack : 0;
+  const minRaise=hand ? Math.min(maxRaise,hand.betting.currentBet+hand.betting.minRaise) : 0;
   const leave = () => {
+    setBetPanelOpen(false);
     if(!socket.connected || !roomCode){setRoomCode("");setPlayers([]);setHand(null);setTable(false);return;}
     socket.timeout(5000).emit("room:leave",(err:Error|null,result?:{ok:boolean;profile?:Profile;pending?:boolean;error?:string})=>{
       if(err || !result?.ok){setActionError(result?.error ?? "Не удалось выйти. Попробуйте снова.");return;}
@@ -187,7 +192,8 @@ function App() {
         <div className="community"><p>{roomCode ? (hand ? t.stages[hand.betting.street as keyof typeof t.stages] ?? hand.betting.street : t.waitingHand) : [t.stages.preflop,t.stages.flop,t.stages.turn,t.stages.river,t.stages.showdown][stage]}</p><div className="cards">{board.map((value,i)=><Card key={i} {...(roomCode ? (hand?.board[i] ? {value: displayCard(hand.board[i]!)} : {}) : (i<visible ? {value} : {}))}/>)}</div><span className="pot-amount" key={hand?.betting.pot ?? 0}>{t.pot}: {hand?.betting.pot ?? 0} ◉</span></div>
         <div className="seat player"><div className="hand">{roomCode ? [0,1].map(i => <Card key={i} {...(hand?.hole[i] ? {value: displayCard(hand.hole[i]!)} : {})}/>) : <><Card value="A♠"/><Card value="Q♥"/></>}</div><b>{name} · {t.you} {hand && profile && positionLabels(hand.betting.players,hand.betting.button,profile.id).map(label=><span className="position-badge" key={label}>{label}</span>)}</b><span>{me?.stack ?? profile?.seat?.stack ?? 10000} ◉ {me ? `· ${t.bet} ${me.streetBet}` : ""}</span></div>
       </div>
-      <div className="controls"><div aria-live="polite"><strong>{!hand ? (roomCode && readyPlayers>=2 ? t.readyToDeal : t.needTwo) : hand.result ? t.finished : myTurn ? t.yourTurn : `${t.turn}: ${players.find(p=>p.id===hand.betting.turn)?.name ?? t.awaiting}`}</strong><p>{actionError || (deadline && !hand?.result ? `${t.left} ${Math.max(0,Math.ceil((deadline-clock)/1000))} ${t.seconds}` : t.savedChips)}</p></div>{roomCode && (!hand || hand.result) ? <button className="primary" disabled={readyPlayers<2} onClick={()=>socket.timeout(5000).emit("room:advance",roomCode,(err:Error|null,result?:{ok:boolean;error?:string})=>{if(err || !result?.ok)setActionError(preferences.language==="ru" ? result?.error ?? t.startError : t.startError);})}>{hand ? t.newHand : t.deal}</button> : roomCode && hand ? <div className="actions"><button disabled={!myTurn} onClick={()=>sendAction("fold")}>{t.fold}</button><button disabled={!myTurn} onClick={()=>sendAction(callAmount ? "call" : "check")}>{callAmount ? `${t.call} ${Math.min(callAmount,me?.stack ?? 0)}` : t.check}</button><label>{t.raiseTo}<input type="number" min="1" step="1" value={raiseTo} onChange={e=>setRaiseTo(e.target.value)}/></label><button disabled={!myTurn} onClick={()=>sendAction("raise")}>{t.raise}</button></div> : <button className="primary" onClick={()=>setStage(stage===4 ? 0 : stage+1)}>{t.nextCard}</button>}</div>
+      <div className="controls"><div aria-live="polite"><strong>{!hand ? (roomCode && readyPlayers>=2 ? t.readyToDeal : t.needTwo) : hand.result ? t.finished : myTurn ? t.yourTurn : `${t.turn}: ${players.find(p=>p.id===hand.betting.turn)?.name ?? t.awaiting}`}</strong><p>{actionError || (deadline && !hand?.result ? `${t.left} ${Math.max(0,Math.ceil((deadline-clock)/1000))} ${t.seconds}` : t.savedChips)}</p></div>{roomCode && (!hand || hand.result) ? <button className="primary" disabled={readyPlayers<2} onClick={()=>socket.timeout(5000).emit("room:advance",roomCode,(err:Error|null,result?:{ok:boolean;error?:string})=>{if(err || !result?.ok)setActionError(preferences.language==="ru" ? result?.error ?? t.startError : t.startError);})}>{hand ? t.newHand : t.deal}</button> : roomCode && hand ? <div className="actions"><button disabled={!myTurn} onClick={()=>sendAction("fold")}>{t.fold}</button><button disabled={!myTurn} onClick={()=>sendAction(callAmount ? "call" : "check")}>{callAmount ? `${t.call} ${Math.min(callAmount,me?.stack ?? 0)}` : t.check}</button><button disabled={!myTurn || maxRaise<=hand.betting.currentBet} onClick={()=>{setRaiseTo(String(minRaise));setBetPanelOpen(true);}}>{t.raise}</button></div> : <button className="primary" onClick={()=>setStage(stage===4 ? 0 : stage+1)}>{t.nextCard}</button>}</div>
+      {betPanelOpen && hand && !hand.result && <BetPanel min={minRaise} max={maxRaise} currentBet={hand.betting.currentBet} value={raiseTo} disabled={!myTurn} language={preferences.language} onChange={setRaiseTo} onClose={()=>setBetPanelOpen(false)} onRaise={()=>sendAction("raise")}/>}
     </main>}
     <footer>СВОИ © 2026<span>{t.footer}</span></footer>
   </div>;
