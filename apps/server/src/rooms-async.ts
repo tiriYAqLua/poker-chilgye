@@ -65,10 +65,8 @@ export class AsyncRoomManager {
     });
   }
   async addBots(room:AsyncRoom):Promise<void> {
-    for(let i=1;i<=5;i++) {
-      const bot=await this.wallet.createGuest(true);
-      await this.join(room.code,bot.id,`🤖 Бот ${i}`);
-    }
+    const bots=await this.wallet.createBotSeats(room.code);
+    room.players.push(...bots.map(bot=>({...bot,leaving:false})));
   }
   async start(code:string,id:string):Promise<AsyncPersistentHand> {
     return this.exclusive(code,async()=>{

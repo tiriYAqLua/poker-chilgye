@@ -76,6 +76,18 @@ export class PostgresWalletStore {
     return result.rows[0]?.account_id ?? null;
   }
 
+  async createBotSeats(room:string):Promise<{id:string;name:string}[]> {
+    if(!room)throw Error("Invalid room");
+    const bots=Array.from({length:5},(_,i)=>({id:`bot:${randomUUID()}`,name:`🤖 Бот ${i+1}`}));
+    const ids=bots.map(bot=>bot.id),names=bots.map(bot=>bot.name);
+    await this.transaction(async connection=>{
+      await connection.query("INSERT INTO accounts (id,balance) SELECT id,0 FROM unnest($1::text[]) AS id",[ids]);
+      await connection.query("INSERT INTO seats (account_id,room,stack) SELECT id,$2,10000 FROM unnest($1::text[]) AS id",[ids,room]);
+      await connection.query("INSERT INTO display_names (account_id,name) SELECT * FROM unnest($1::text[],$2::text[])",[ids,names]);
+    });
+    return bots;
+  }
+
   /** Call only after the OAuth provider has verified the Google subject. */
   async loginGoogle(currentId:string,subject:string,name?:string):Promise<{id:string;token:string}> {
     if(typeof subject!=="string"||!subject||subject.length>255)throw Error("Invalid Google identity");
