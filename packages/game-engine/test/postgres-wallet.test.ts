@@ -14,6 +14,15 @@ describe("PostgresWalletStore", () => {
     await expect(store.createGuest()).rejects.toThrow();
   });
 
+  it("applies the tracked migration safely more than once",async()=>{
+    const database=new PGlite();
+    databases.push(database);
+    await PostgresWalletStore.migrate(database);
+    await PostgresWalletStore.migrate(database);
+    const store=await PostgresWalletStore.open(database);
+    expect(await store.createGuest()).toMatchObject({id:expect.any(String),token:expect.any(String)});
+  });
+
   it("persists guest wallets and makes a transfer idempotent",async()=>{
     const database=new PGlite();
     databases.push(database);

@@ -8,7 +8,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: POKER_ORIGIN
-        sync: false
+        fromService:
+          type: web
+          name: poker-friends
+          envVarKey: RENDER_EXTERNAL_URL
       - key: DATABASE_URL
         sync: false
       - key: POKER_SNAPSHOT_KEY
