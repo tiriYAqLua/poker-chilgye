@@ -15,6 +15,7 @@ import {createWebHost} from "./web-host.js";
 const port=Number(process.env.PORT ?? 3001);
 const host=process.env.POKER_HOST ?? "127.0.0.1";
 const origin=process.env.POKER_ORIGIN ?? "http://127.0.0.1:5173";
+if(process.env.POKER_REQUIRE_POSTGRES==="true"&&!process.env.DATABASE_URL?.trim())throw Error("DATABASE_URL is required for this deployment");
 const parsedOrigin=new URL(origin);
 if(!["http:","https:"].includes(parsedOrigin.protocol) || parsedOrigin.origin!==origin)throw Error("POKER_ORIGIN must be an exact http(s) origin without a trailing slash");
 const dataDirectory=resolve(process.env.POKER_DATA_DIR ?? "./data");

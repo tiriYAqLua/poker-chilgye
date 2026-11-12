@@ -49,11 +49,12 @@ export async function attachAsyncRealtime(http:HttpServer,wallet:PostgresWalletS
   };
   for(const id of await wallet.activeHandIds()) {const hand=await wallet.loadHand(id,key),roomCode=(hand?.state as {room?:string}|undefined)?.room,room=roomCode?manager.get(roomCode):undefined;if(room){schedule(room);for(const player of room.players)scheduleDeparture(player.id);}}
   io.use((socket,next)=>{void (async()=>{const token=sessionToken(socket.handshake.headers.cookie),id=token?await wallet.authenticate(token):null;if(!id){next(new Error("Необходима гостевая сессия"));return;}socket.data.userId=id;next();})().catch(()=>next(new Error("Необходима гостевая сессия")));});
-  io.on("connection",socket=>{void (async()=>{
-    const id=socket.data.userId as string;socket.join(accountRoom(id));cancelTimer(leaveTimers,id);const currentSeat=await wallet.seat(id);if(currentSeat){const room=manager.get(currentSeat.room);if(room)await publish(room);}
+  io.on("connection",socket=>{
+    const id=socket.data.userId as string;
+    socket.join(accountRoom(id));
+    cancelTimer(leaveTimers,id);
     const playerName=(value:unknown)=>typeof value==="string"&&value.trim()?value.trim().slice(0,20):"Игрок";
     const run=(reply:unknown,operation:()=>Promise<object>)=>{void (async()=>{const respond=replyOrNoop(reply);try{respond({ok:true,...await operation()});}catch(error){respond({ok:false,error:error instanceof Error?error.message:"Ошибка сервера"});}})();};
-    await notifyFriends(id);
     socket.on("friends:list",reply=>run(reply,()=>friendState(id)));
     socket.on("profile:name",(raw,reply)=>run(reply,async()=>{if(typeof raw!=="string"||!raw.trim()||raw.trim().length>20)throw Error("Укажите имя до 20 символов");if(await wallet.seat(id))throw Error("Имя можно изменить в главном меню после выхода из комнаты");await wallet.setDisplayName(id,raw.trim());await notifyFriends(id);return {};}));
     socket.on("history:list",reply=>run(reply,async()=>({hands:await wallet.handHistory(id)})));
@@ -68,7 +69,20 @@ export async function attachAsyncRealtime(http:HttpServer,wallet:PostgresWalletS
     socket.on("room:leave",reply=>run(reply,async()=>{const seat=await wallet.seat(id);if(!seat)return {profile:await wallet.profile(id)};await manager.leave(seat.room,id);const room=manager.get(seat.room);if(room){schedule(room);await publish(room);}else{cancelTimer(turnTimers,seat.room);deadlines.delete(seat.room);}return {profile:await wallet.profile(id),pending:!!await wallet.seat(id)};}));
     socket.on("room:advance",(raw,reply)=>run(reply,async()=>{if(typeof raw!=="string")throw Error("Нет комнаты");const hand=await manager.start(raw,id),room=manager.get(raw)!;schedule(room);await publish(room);return {handId:hand.id,version:hand.version};}));
     socket.on("room:action",(raw,handId,version,action,reply)=>run(reply,async()=>{if(typeof raw!=="string"||typeof handId!=="string"||!Number.isSafeInteger(version)||!action||typeof action!=="object")throw Error("Некорректное действие");const candidate=action as Record<string,unknown>;if(!["fold","check","call","raise"].includes(String(candidate.type))||(candidate.type==="raise"&&typeof candidate.to!=="number"))throw Error("Некорректное действие");const prior=manager.get(raw);await manager.action(raw,id,handId,version as number,candidate as BettingAction);const room=manager.get(raw);if(room){schedule(room);await publish(room);}else if(prior)await publish(prior);return {};}));
-    socket.on("disconnect",()=>{void (async()=>{if(!online(id)){await notifyFriends(id);const seat=await wallet.seat(id),room=seat?manager.get(seat.room):undefined;if(room){await publish(room);scheduleDeparture(id);}}})();});
-  })();});
+    socket.on("disconnect",()=>{
+      if(online(id))return;
+      scheduleDeparture(id);
+      void (async()=>{
+        const seat=await wallet.seat(id),room=seat?manager.get(seat.room):undefined;
+        if(room)await publish(room);
+        await notifyFriends(id);
+      })().catch(error=>console.error("Failed to update player presence",error));
+    });
+    void (async()=>{
+      const seat=await wallet.seat(id),room=seat?manager.get(seat.room):undefined;
+      if(room&&socket.connected)await publish(room);
+      if(socket.connected)await notifyFriends(id);
+    })().catch(error=>console.error("Failed to synchronize player presence",error));
+  });
   return {close:()=>{for(const timer of turnTimers.values())clearTimeout(timer);for(const timer of leaveTimers.values())clearTimeout(timer);io.close();}};
 }

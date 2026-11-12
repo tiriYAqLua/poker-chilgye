@@ -7,6 +7,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: POKER_REQUIRE_POSTGRES
+        value: "true"
       - key: POKER_ORIGIN
         fromService:
           type: web
