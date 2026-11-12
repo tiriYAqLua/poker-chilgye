@@ -60,8 +60,8 @@ export class PostgresWalletStore {
     }
   }
 
-  async createGuest():Promise<{id:string;token:string}> {
-    const id=randomUUID();
+  async createGuest(bot=false):Promise<{id:string;token:string}> {
+    const id=(bot?"bot:":"")+randomUUID();
     const token=randomBytes(32).toString("base64url");
     return this.transaction(async connection=>{
       await connection.query("INSERT INTO accounts (id,balance) VALUES ($1,$2)",[id,10000]);

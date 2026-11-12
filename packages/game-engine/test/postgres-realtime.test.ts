@@ -9,6 +9,24 @@ import {attachAsyncRealtime} from "../../../apps/server/src/realtime-async.js";
 describe("PostgreSQL realtime",()=>{
   let database:PGlite|undefined,server:HttpServer|undefined,clients:Socket[]=[];
   afterEach(async()=>{for(const client of clients)client.disconnect();clients=[];if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));await database?.close();});
+  it("runs bot turns in order and returns chips when leaving",async()=>{
+    database=new PGlite();await PostgresWalletStore.migrate(database);const store=await PostgresWalletStore.open(database);
+    const human=await store.createGuest();server=createServer(createAsyncApi(store));const realtime=await attachAsyncRealtime(server,store,Buffer.alloc(32,4));
+    await new Promise<void>(resolve=>server!.listen(0,"127.0.0.1",resolve));
+    const socket=connect(`http://127.0.0.1:${(server.address() as {port:number}).port}`,{forceNew:true,transports:["websocket"],extraHeaders:{origin:"http://127.0.0.1:5173",cookie:`poker_session=${human.token}`}});clients.push(socket);
+    await new Promise<void>((resolve,reject)=>{socket.once("connect",resolve);socket.once("connect_error",reject);});
+    let latest:any;socket.on("room:state",state=>{latest=state;});
+    const created=await socket.timeout(5000).emitWithAck("room:create-bots","Alice");expect(created.ok).toBe(true);
+    expect(latest.players).toHaveLength(6);
+    const started=await socket.timeout(5000).emitWithAck("room:advance",created.room);expect(started.ok).toBe(true);
+    await new Promise(resolve=>setTimeout(resolve,4000));
+    expect(latest.hand.betting.turn).toBe(human.id);
+    const action=await socket.timeout(5000).emitWithAck("room:action",created.room,latest.handId,latest.version,{type:"fold"});expect(action.ok).toBe(true);
+    await new Promise(resolve=>setTimeout(resolve,20000));
+    expect(latest.hand.result).toBeDefined();
+    const left=await socket.timeout(5000).emitWithAck("room:leave");expect(left.ok).toBe(true);expect(left.profile.seat).toBeNull();
+    realtime.close();
+  },40000);
   it("acknowledges a persisted room command only after its PostgreSQL transaction",async()=>{
     database=new PGlite();await PostgresWalletStore.migrate(database);const store=await PostgresWalletStore.open(database);
     const alice=await store.createGuest(),bob=await store.createGuest();
