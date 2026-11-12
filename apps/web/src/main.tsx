@@ -34,6 +34,7 @@ function App() {
   const t=labels[preferences.language];
   const [table, setTable] = useState(false);
   const [botMode,setBotMode] = useState(false);
+  const [botMessage,setBotMessage] = useState("");
   const [stage, setStage] = useState(0);
   const [name, setName] = useState("Игрок");
   const [draft, setDraft] = useState(()=>localStorage.getItem("poker_name") || "Игрок");
@@ -91,6 +92,7 @@ function App() {
     return () => {cancelled=true; socket.removeAllListeners(); socket.disconnect(); };
   }, [socket]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return ()=>clearInterval(timer);},[]);
+  useEffect(()=>{if(!botMode||!table)return;const names=["Алекс","Мила","Дэн","София","Макс"];const timer=setInterval(()=>setStage(current=>{const next=current>=4?0:current+1;setBotMessage(next===4?"Боты открывают карты":`${names[Math.floor(Math.random()*names.length)]} сделал ход`);return next;}),4500);return ()=>clearInterval(timer);},[botMode,table]);
   const claimGrant = () => {
     setWalletError("");
     fetch("/api/grant",{method:"POST",credentials:"include"})
@@ -163,7 +165,7 @@ function App() {
       <section className="info"><div><span>{t.invite}</span><h3>{t.roomCode}</h3><p>{t.inviteInfo}</p></div><div><span>{t.play}</span><h3>Texas Hold’em</h3><p>{t.gameInfo}</p></div><div><span>{t.return}</span><h3>{t.keepChips}</h3><p>{t.walletInfo}</p></div></section>
     </main> : <main className="game">
       <div className="table-heading"><button className="secondary" onClick={()=>{setBotMode(false);leave();}}>{t.menu}</button><div><h2>{t.table}</h2><span>{roomCode ? `${t.room}: ${roomCode} · ${players.length}/6 ${t.players}` : t.localDemo}</span></div><span className="badge">{connected && roomCode ? t.realtime : t.demoOnly}</span></div>
-      {roomCode && <p className="room-players">{t.participants}: {players.map(player => player.name).join(", ")}</p>}
+      {botMode && <p className="room-players" aria-live="polite">🤖 {botMessage || "Боты готовятся к раздаче"}</p>}{roomCode && <p className="room-players">{t.participants}: {players.map(player => player.name).join(", ")}</p>}
       {hand && <p className="room-players">{t.positions}</p>}
       {hand?.result && <div className="showdown" role="status"><strong>{hand.result.winners.length > 1 ? t.tie : hand.result.players.length ? t.bestHand : t.winner}: {hand.result.winners.map(id => players.find(player => player.id === id)?.name ?? t.player).join(", ")}</strong>{hand.result.players.map(result => <div key={result.id}>{players.find(player => player.id === result.id)?.name ?? t.player}: {result.hole.map(displayCard).join(" ")} — {t.categories[result.category]}</div>)}{Object.entries(hand.result.payouts).filter(([,amount])=>amount>0).map(([id,amount])=><div key={`payout-${id}`}>{players.find(player=>player.id===id)?.name ?? t.player}: {t.payout} {amount.toLocaleString(preferences.language==="ru" ? "ru-RU" : "en-US")} ◉</div>)}</div>}
       <div className="felt">
@@ -182,5 +184,6 @@ function App() {
   </div>;
 }
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App/></React.StrictMode>);
+
 
 
