@@ -9,6 +9,18 @@ import {attachAsyncRealtime} from "../../../apps/server/src/realtime-async.js";
 describe("PostgreSQL realtime",()=>{
   let database:PGlite|undefined,server:HttpServer|undefined,clients:Socket[]=[];
   afterEach(async()=>{for(const client of clients)client.disconnect();clients=[];if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));await database?.close();});
+  it("releases an orphaned idle seat on reconnect",async()=>{
+    database=new PGlite();await PostgresWalletStore.migrate(database);const store=await PostgresWalletStore.open(database);
+    const human=await store.createGuest();server=createServer(createAsyncApi(store));const realtime=await attachAsyncRealtime(server,store,Buffer.alloc(32,4));
+    await store.reserve(human.id,"ORPHAN",10000);
+    await new Promise<void>(resolve=>server!.listen(0,"127.0.0.1",resolve));
+    const socket=connect(`http://127.0.0.1:${(server.address() as {port:number}).port}`,{forceNew:true,transports:["websocket"],extraHeaders:{origin:"http://127.0.0.1:5173",cookie:`poker_session=${human.token}`}});clients.push(socket);
+    await new Promise<void>((resolve,reject)=>{socket.once("connect",resolve);socket.once("connect_error",reject);});
+    const reply=await socket.timeout(5000).emitWithAck("room:resume","Alice");
+    expect(reply.ok).toBe(true);expect(reply.profile.seat).toBeNull();expect(reply.profile.balance).toBe(10000);
+    expect((await socket.timeout(5000).emitWithAck("room:create-bots","Alice")).ok).toBe(true);
+    realtime.close();
+  });
   it("runs bot turns in order and returns chips when leaving",async()=>{
     database=new PGlite();await PostgresWalletStore.migrate(database);const store=await PostgresWalletStore.open(database);
     const human=await store.createGuest();server=createServer(createAsyncApi(store));const realtime=await attachAsyncRealtime(server,store,Buffer.alloc(32,4));
