@@ -2,7 +2,7 @@ import {createServer} from "node:http";
 import {mkdirSync} from "node:fs";
 import {resolve} from "node:path";
 import {WalletStore} from "./wallet.js";
-import {openPostgresWallet,type PostgresWalletStore} from "./postgres-wallet.js";
+import {migratePostgres,openPostgresWallet,type PostgresWalletStore} from "./postgres-wallet.js";
 import {createApi} from "./api.js";
 import {createAsyncApi} from "./api-async.js";
 import {loadOrCreateKey,parseConfiguredKey} from "./key.js";
@@ -30,6 +30,9 @@ http.listen(port,host,()=>{
     if(Boolean(clientId)!==Boolean(clientSecret))throw Error("Both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required");
     if(process.env.DATABASE_URL) {
       if(!process.env.POKER_SNAPSHOT_KEY)throw Error("POKER_SNAPSHOT_KEY is required when DATABASE_URL is configured");
+      // Render starts a fresh instance with an empty database. Ensure the
+      // schema exists before realtime restoration queries hand_snapshots.
+      await migratePostgres(process.env.DATABASE_URL);
       postgresWallet=await openPostgresWallet(process.env.DATABASE_URL);
       const key=parseConfiguredKey(process.env.POKER_SNAPSHOT_KEY);
       const google=clientId && clientSecret ? new AsyncGoogleAuthFlow(postgresWallet,googleProvider(clientId,clientSecret,`${origin}/api/auth/google/callback`)) : undefined;
