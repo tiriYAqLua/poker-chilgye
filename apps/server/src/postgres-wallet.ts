@@ -43,6 +43,8 @@ export class PostgresWalletStore {
 
   async close():Promise<void> {await this.pool.end?.();}
 
+  async ping():Promise<void> {await this.pool.query("SELECT 1");}
+
   private async transaction<T>(operation:(connection:PostgresConnection)=>Promise<T>):Promise<T> {
     const connection=this.pool.connect ? await this.pool.connect() : this.pool;
     await connection.query("BEGIN");

@@ -15,7 +15,10 @@ export function createAsyncApi(store:PostgresWalletStore,allowedOrigin=localOrig
     const origin=req.headers.origin,path=new URL(req.url??"/","http://local");
     const makeCookie=(name:string,value:string)=>`${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${allowedOrigin.startsWith("https://")?"; Secure":""}`;
     if(origin===allowedOrigin){res.setHeader("Access-Control-Allow-Origin",origin);res.setHeader("Access-Control-Allow-Credentials","true");res.setHeader("Vary","Origin");}
-    if(req.url==="/health"&&req.method==="GET"){send(200,{ok:true,service:"poker-server"});return;}
+    if(req.url==="/health"&&req.method==="GET"){
+      try{await store.ping();send(200,{ok:true,service:"poker-server"});}catch{send(503,{ok:false,service:"poker-server",error:"DATABASE_UNAVAILABLE"});}
+      return;
+    }
     if(path.pathname==="/api/auth/google/start"&&req.method==="POST"){
       if(origin!==allowedOrigin){send(403,{error:"INVALID_ORIGIN"});return;}
       const token=sessionToken(req.headers.cookie);if(!google||!token){send(503,{error:"GOOGLE_UNAVAILABLE"});return;}
